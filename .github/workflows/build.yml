@@ -47,7 +47,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        device: ${{ inputs.device }}
+        # A manual run builds only the chosen device; a push builds both.
+        device: ${{ fromJSON(inputs.device && format('["{0}"]', inputs.device) || '["coral", "flame"]') }}
     steps:
       - uses: actions/checkout@v5
       - name: Prepare build host
@@ -81,7 +82,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        device: ${{ inputs.device }}
+        # A manual run builds only the chosen device; a push builds both.
+        device: ${{ fromJSON(inputs.device && format('["{0}"]', inputs.device) || '["coral", "flame"]') }}
     steps:
       - uses: actions/checkout@v5
       - name: Download completed kernel checkpoint
