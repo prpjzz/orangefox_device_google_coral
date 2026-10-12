@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        device: [coral, flame]
+        device: ${{ inputs.device }}
     steps:
       - uses: actions/checkout@v5
       - name: Prepare build host
@@ -81,7 +81,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        device: [coral, flame]
+        device: ${{ inputs.device }}
     steps:
       - uses: actions/checkout@v5
       - name: Download completed kernel checkpoint
