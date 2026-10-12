@@ -31,10 +31,14 @@ jobs:
             git push origin HEAD:main
           fi
   kernel:
-    name: Build and checkpoint kernel
+    name: Build and checkpoint ${{ matrix.device }} kernel
     needs: import-tree
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [coral, flame]
     steps:
       - uses: actions/checkout@v5
       - name: Prepare build host
@@ -43,11 +47,12 @@ jobs:
         shell: bash
         env:
           JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+          DEVICE: ${{ matrix.device }}
         run: bash scripts/build.sh "$RUNNER_TEMP/orangefox" kernel
       - name: Preserve completed kernel checkpoint
         uses: actions/upload-artifact@v6
         with:
-          name: coral-kernel-${{ github.run_id }}
+          name: ${{ matrix.device }}-kernel-${{ github.run_id }}
           path: kernel-checkpoint/
           if-no-files-found: error
           retention-days: 14
@@ -56,20 +61,24 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: coral-kernel-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ matrix.device }}-kernel-logs-${{ github.run_id }}-${{ github.run_attempt }}
           path: logs/
           if-no-files-found: warn
   recovery:
-    name: Build recovery with checkpoint kernel
+    name: Build ${{ matrix.device }} recovery with checkpoint kernel
     needs: kernel
     runs-on: ubuntu-22.04
     timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        device: [coral, flame]
     steps:
       - uses: actions/checkout@v5
       - name: Download completed kernel checkpoint
         uses: actions/download-artifact@v7
         with:
-          name: coral-kernel-${{ github.run_id }}
+          name: ${{ matrix.device }}-kernel-${{ github.run_id }}
           path: kernel-checkpoint/
       - name: Prepare build host
         run: bash scripts/prepare_host.sh
@@ -77,17 +86,18 @@ jobs:
         shell: bash
         env:
           JAVA_HOME: /usr/lib/jvm/java-11-openjdk-amd64
+          DEVICE: ${{ matrix.device }}
         run: bash scripts/build.sh "$RUNNER_TEMP/orangefox" recovery
       - name: Preserve recovery logs
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: coral-recovery-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          name: ${{ matrix.device }}-recovery-logs-${{ github.run_id }}-${{ github.run_attempt }}
           path: logs/
           if-no-files-found: warn
       - name: Upload structurally validated experimental image
         uses: actions/upload-artifact@v6
         with:
-          name: OrangeFox-unofficial-coral-${{ github.run_id }}-${{ github.run_attempt }}
+          name: OrangeFox-unofficial-${{ matrix.device }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: artifacts/
           if-no-files-found: error

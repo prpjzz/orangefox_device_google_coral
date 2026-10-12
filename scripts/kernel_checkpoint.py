@@ -49,9 +49,9 @@ def check_dtb(path):
         raise ValueError('Empty DTB bundle')
 
 
-def export_checkpoint(android, device, checkpoint):
+def export_checkpoint(android, device, checkpoint, product):
     expected = identity(android, device)
-    out = android / 'out/target/product/coral'
+    out = android / 'out/target/product' / product
     files = {
         'Image.lz4': out / 'kernel',
         'dtb.img': out / 'dtb.img',
@@ -83,7 +83,7 @@ def export_checkpoint(android, device, checkpoint):
     print(f'Kernel checkpoint saved: {len(files)} verified files')
 
 
-def import_checkpoint(android, device, checkpoint):
+def import_checkpoint(android, device, checkpoint, product):
     destination = android / 'device/google/coral/ci-kernel'
     if destination.exists():
         raise ValueError('Refusing to reuse an existing staged kernel')
@@ -106,7 +106,7 @@ def import_checkpoint(android, device, checkpoint):
     shutil.copy2(checkpoint / 'Image.lz4', destination / 'Image.lz4')
     (destination / 'dtb').mkdir()
     shutil.copy2(checkpoint / 'dtb.img', destination / 'dtb/coral.dtb')
-    out = android / 'out/target/product/coral'
+    out = android / 'out/target/product' / product
     for name in metadata['files']:
         if name.startswith('modules/'):
             target = out / name.removeprefix('modules/')
@@ -123,6 +123,8 @@ if __name__ == '__main__':
     parser.add_argument('android', type=pathlib.Path)
     parser.add_argument('device', type=pathlib.Path)
     parser.add_argument('checkpoint', type=pathlib.Path)
+    parser.add_argument('--device-name', choices=('coral', 'flame'), default='coral',
+                        help='Product whose out/ directory holds the kernel outputs')
     args = parser.parse_args()
     operation = export_checkpoint if args.mode == 'export' else import_checkpoint
-    operation(args.android.resolve(), args.device.resolve(), args.checkpoint.resolve())
+    operation(args.android.resolve(), args.device.resolve(), args.checkpoint.resolve(), args.device_name)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -eo pipefail
 port_root=$(cd "$(dirname "$0")/.." && pwd)
-build_root=${1:?Usage: build.sh ABSOLUTE_BUILD_DIRECTORY [all|kernel|recovery] [CHECKPOINT_DIRECTORY]}
+build_root=${1:?Usage: DEVICE=coral|flame build.sh ABSOLUTE_BUILD_DIRECTORY [all|kernel|recovery] [CHECKPOINT_DIRECTORY]}
 build_stage=${2:-all}
 checkpoint=${3:-$port_root/kernel-checkpoint}
 [[ "$build_root" = /* ]] || { echo 'Use an absolute build directory'; exit 1; }
@@ -10,6 +10,13 @@ case "$build_stage" in
     *) echo 'Build stage must be all, kernel or recovery'; exit 1 ;;
 esac
 [[ "$checkpoint" = /* ]] || { echo 'Use an absolute checkpoint directory'; exit 1; }
+# Both products share this tree under device/google/coral; select the product
+# here so one script builds either variant.
+device=${DEVICE:-coral}
+case "$device" in
+    coral|flame) ;;
+    *) echo 'DEVICE must be coral or flame'; exit 1 ;;
+esac
 mkdir -p "$build_root" "$port_root/logs" "$port_root/artifacts"
 exec > >(tee -a "$port_root/logs/session.log") 2>&1
 set -E
@@ -65,10 +72,12 @@ git -C device/qcom/twrp-common apply --check "$prepdecrypt_patch"
 git -C device/qcom/twrp-common apply "$prepdecrypt_patch"
 python3 "$port_root/scripts/test_prepdecrypt.py" "$build_root/android/device/qcom/twrp-common/crypto/system/bin/prepdecrypt.sh"
 if [[ "$build_stage" = recovery ]]; then
-    python3 "$port_root/scripts/kernel_checkpoint.py" import "$build_root/android" "$port_root" "$checkpoint"
+    python3 "$port_root/scripts/kernel_checkpoint.py" import "$build_root/android" "$port_root" "$checkpoint" --device-name "$device"
 fi
-export FOX_BUILD_DEVICE=coral
+# vendorsetup.sh configures the shared tree and sets FOX_BUILD_DEVICE=coral;
+# override it afterwards so the requested product wins.
 source device/google/coral/vendorsetup.sh
+export FOX_BUILD_DEVICE=$device
 # Android envsetup is an interactive shell initializer and uses optional
 # probes that return nonzero. Source it without errexit, then check that the
 # required build functions exist. Keep strict failure handling for lunch/build.
@@ -93,7 +102,7 @@ resource_monitor() {
         df -h "$build_root"
         # Ninja buffers each task's output until completion. Show kernel progress
         # and resource use while the long kernel task is still running.
-        kernel_out="$build_root/android/out/target/product/coral/obj/KERNEL_OBJ"
+        kernel_out="$build_root/android/out/target/product/$device/obj/KERNEL_OBJ"
         if [[ -d "$kernel_out" ]]; then
             echo "Kernel object files: $(find "$kernel_out" -name '*.o' -type f | wc -l)"
         fi
@@ -105,7 +114,7 @@ resource_monitor > >(tee "$port_root/logs/resources.log") 2>&1 &
 monitor_pid=$!
 trap 'kill "$monitor_pid" 2>/dev/null || true' EXIT
 echo "Building stage $build_stage with $build_jobs jobs; host CPUs: $(nproc)"
-lunch twrp_coral-eng
+lunch twrp_$device-eng
 boot_os_version=$(get_build_var CORAL_RECOVERY_OS_VERSION)
 boot_os_patch=$(get_build_var PLATFORM_SECURITY_PATCH)
 boot_firmware_patch=$(get_build_var BOOT_SECURITY_PATCH)
@@ -120,11 +129,11 @@ if [[ "$build_stage" = kernel ]]; then
     # Run separately so the two nested kernel make processes do not compete.
     mka kernel -j"$build_jobs" 2>&1 | tee "$port_root/logs/kernel.log"
     mka dtbimage -j"$build_jobs" 2>&1 | tee "$port_root/logs/dtb.log"
-    python3 "$port_root/scripts/kernel_checkpoint.py" export "$build_root/android" "$port_root" "$checkpoint"
+    python3 "$port_root/scripts/kernel_checkpoint.py" export "$build_root/android" "$port_root" "$checkpoint" --device-name "$device"
     exit 0
 fi
 mka bootimage -j"$build_jobs" 2>&1 | tee "$port_root/logs/build.log"
-out=out/target/product/coral
+out=out/target/product/$device
 image="$out/boot.img"
 test -s "$image"
 if [[ "$build_stage" = recovery ]]; then
@@ -133,8 +142,8 @@ if [[ "$build_stage" = recovery ]]; then
 else
     python3 "$port_root/scripts/validate_image.py" "$image" --keymaster-version "$OF_DEFAULT_KEYMASTER_VERSION" "${version_checks[@]}"
 fi
-cp "$image" "$port_root/artifacts/OrangeFox-unofficial-coral.img"
+cp "$image" "$port_root/artifacts/OrangeFox-unofficial-$device.img"
 repo manifest -r -o "$port_root/artifacts/source-manifest.xml"
 git -C "$port_root" rev-parse HEAD > "$port_root/artifacts/device-tree-commit.txt"
 cd "$port_root/artifacts"
-sha256sum OrangeFox-unofficial-coral.img > SHA256SUMS
+sha256sum OrangeFox-unofficial-$device.img > SHA256SUMS
