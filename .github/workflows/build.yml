@@ -4,6 +4,15 @@ on:
     branches: [main]
     paths-ignore: [release/**, .github/workflows/release.yml, README.md, TESTING.md]
   workflow_dispatch:
+    inputs:
+      device:
+        description: Choose Device
+        required: true
+        type: choice
+        options:
+          - coral
+          - flame
+        default: coral
 permissions:
   contents: read
 concurrency:
